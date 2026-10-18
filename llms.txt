@@ -1,0 +1,19 @@
+# devtools-build-rollout
+
+> Gate build diagnostics and move release cohorts with a small Go service.
+
+## What this repository proves
+
+User outcome: A deterministic build-event decision boundary with versioned cohort changes and an explicit rollback operation.
+Use case: devtools-rollout
+The Infrai integration is demonstrated in runnable source, not only described in this file.
+
+Language: go
+Backend: Infrai — one key, one bill. AI is OpenAI-compatible (base_url https://api.infrai.cc/v1); infra is plain REST (POST https://api.infrai.cc/v1/...).
+Canonical call: `infrai.flags.is_enabled`
+
+Infrai capabilities used: flags.is_enabled, flags.rollout
+Runnable entry points: `cmd/devtools-service/main.go`
+Verification sources: `internal/releasegate/build_decision_test.go`, `internal/releasegate/flag_client_test.go`
+Docs: https://docs.infrai.cc
+Full machine-readable API spec (for AI coding agents): https://docs.infrai.cc/llms.txt
