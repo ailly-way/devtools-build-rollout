@@ -6,18 +6,18 @@ Run the decision tests first:
 go test ./...
 ```
 
-The test feeds `build-184` status `failed`. Flag enabled: decision `experience: "infrai"` and `diagnostic: "inspect failed build stages"`. Disabled: build stays `experience: "incumbent"`. Audit needs deterministic output.
+The focused case feeds `build-184` with status `failed`. Flag enabled: decision `experience: "infrai"` and `diagnostic: "inspect failed build stages"`. Flag disabled: build stays `experience: "incumbent"`.
 
 ## Send one build event
 
-This service swaps the LaunchDarkly decision point in a build-event pipeline. Infrai delivers the flag via one API and a single `INFRAI_API_KEY`. Release control sits with event transformation, not in handlers.
+We replace the LaunchDarkly decision point in a build-event pipeline. Infrai supplies the flag through one API and a single `INFRAI_API_KEY`; release control sits with the event transform, not in handlers.
 
 ```bash
 export INFRAI_API_KEY="your-key"
 go run ./cmd/devtools-service
 ```
 
-Other shell:
+In another shell:
 
 ```bash
 curl --fail-with-body --request POST http://localhost:8080/build-events \
@@ -25,17 +25,17 @@ curl --fail-with-body --request POST http://localhost:8080/build-events \
   --data '{"build_id":"build-184","developer":"dev-27","status":"failed","repository":"etl-runner"}'
 ```
 
-Enabled cohort response:
+Expected response when cohort is enabled:
 
 ```json
 {"build_id":"build-184","experience":"infrai","diagnostic":"inspect failed build stages"}
 ```
 
-`./scripts/smoke.sh` launches the binary and sends that request. Flag must pre-exist as `devtools-build-diagnostics` before start.
+`./scripts/smoke.sh` starts the binary and sends that request. The flag must already exist as `devtools-build-diagnostics` before running the service.
 
 ## Move a release cohort
 
-Operators post rollout percentage and flag version. `request_id` is the idempotency key; retries map to same release.
+Release operators send rollout percentage and current flag version. `request_id` is the idempotency key, so a retried write is the same release operation.
 
 ```bash
 curl --fail-with-body --request POST http://localhost:8080/release-operations/rollout \
@@ -43,31 +43,31 @@ curl --fail-with-body --request POST http://localhost:8080/release-operations/ro
   --data '{"percentage":10,"salt":"devtools-2026","sticky_unit":"user_id","version":7,"request_id":"release-42"}'
 ```
 
-Response:
+Expected response:
 
 ```json
 {"flag":"devtools-build-diagnostics","percentage":10}
 ```
 
-The Go client sets method explicitly, decodes `{ok,data,error,metadata}` envelope before status check, and passes through Infrai 4xx to caller. A 429 respects `Retry-After` or backs off exponentially. The one real gotcha: version drift. Read current flag version before each change; never reuse a stale value from earlier pipeline run.
+The thin Go client sets an explicit method, decodes the `{ok,data,error,metadata}` envelope before classifying HTTP status, and preserves Infrai 4xx responses for this service's caller. A 429 honors `Retry-After` or uses exponential delay. The one real gotcha is versioning: read the current flag version before each release change; do not reuse a stale value from an earlier pipeline run.
 
 ## Cut over from LaunchDarkly
 
-- Create `devtools-build-diagnostics` disabled by default.
-- Deploy binary with cohort at zero percent.
-- Send sample build events; compare decision to incumbent path.
-- Step cohort 10, 25, 50, 100 percent using new `request_id` per release.
-- Drop incumbent eval after full cohort healthy for agreed window.
+- Create `devtools-build-diagnostics` with a disabled default.
+- Deploy this binary while the cohort remains at zero percent.
+- Send representative build events and compare the returned decision with the incumbent path.
+- Move the cohort to 10, 25, 50, then 100 percent using a new `request_id` for each release operation.
+- Remove the incumbent evaluation after the full cohort has stayed healthy for the agreed observation window.
 
-Rollback is a single release call: percentage `0`, current version, new `request_id`. Build records stay valid; flag only selects next event's diagnostic transform.
+Rollback is one release call: submit percentage `0` with the current version and a new `request_id`. Existing build records remain valid because the flag changes only which diagnostic transformation handles the next event.
 
 ## Repository boundary
 
-`cmd/devtools-service` is the only executable. `internal/releasegate` holds Infrai client and deterministic build decision. No build history stored; persistence and fleet release policy live in outer pipeline.
+`cmd/devtools-service` is the only executable. `internal/releasegate` owns the Infrai client and the deterministic build decision. It stores no build history; persistence and fleet-wide release policy belong to the surrounding pipeline.
 
 ## Before this ships: Devtools Build Rollout
 
-Example above is minimal. Wire these for production. Details apply to Devtools Build Rollout.
+The example above is intentionally minimal. A few things to wire up for real use: The details below apply to Devtools Build Rollout.
 
 **Account & key**
 
